@@ -215,3 +215,13 @@ def main():
 
 if __name__ == '_main_':
     main()
+# Wrapper function for Flask app
+def chatbot_response(user_input):
+    if "conversation" not in st.session_state:
+        st.session_state.conversation = []
+    bot = Chatbot("intents.json")
+    response = bot.get_response(user_input)
+    st.session_state.conversation.append((user_input, response))
+    return response
+
+
