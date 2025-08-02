@@ -8,9 +8,12 @@ from sklearn.linear_model import LogisticRegression
 import time
 import csv
 from datetime import datetime
+from textblob import TextBlob
+from googletrans import Translator
+
 
 class Chatbot:
-    def _init_(self, intents_file):
+    def __init__(self, intents_file):
         """
         Initializes the chatbot by loading intents and training the model.
         """
@@ -67,15 +70,41 @@ class Chatbot:
         joblib.dump(self.clf, self.model_path)
         joblib.dump(self.vectorizer, self.vectorizer_path)
 
+    
     def get_response(self, input_text):
         """
-        Generates a response for the given user input.
+        Generates a response for the given user input with confidence score and sentiment-aware tone.
         """
-        input_text = self.vectorizer.transform([input_text])
-        tag = self.clf.predict(input_text)[0]
+        # Multilingual support: translate input to English
+        translator = Translator()
+        try:
+            translated = translator.translate(input_text, dest='en')
+            input_text_en = translated.text
+        except:
+            input_text_en = input_text  # fallback
+
+        vectorized_input = self.vectorizer.transform([input_text_en])
+        proba = self.clf.predict_proba(vectorized_input)[0]
+        max_confidence = max(proba)
+        predicted_tag = self.clf.predict(vectorized_input)[0]
+
+        # Sentiment analysis
+        sentiment = TextBlob(input_text_en).sentiment.polarity
+
+        # Confidence threshold
+        if max_confidence < 0.6:
+            return "🤔 I'm not sure I understood that. Could you rephrase?"
+
+        # Find response
         for intent in self.intents:
-            if intent['tag'] == tag:
-                return random.choice(intent['responses'])
+            if intent['tag'] == predicted_tag:
+                response = random.choice(intent['responses'])
+                if sentiment > 0.3:
+                    response += " 😊"
+                elif sentiment < -0.3:
+                    response += " I'm here to help, don't worry. 🙏"
+                return response
+        return "I'm sorry, I don't understand that."
         return "I'm sorry, I don't understand that. Can you rephrase?"
 
 def save_conversation(user_input, response):
@@ -149,6 +178,13 @@ def main():
         st.session_state.conversation = []
 
     if choice == "Home":
+        # Show daily summary at end
+        if st.button("Show Today's Summary"):
+            st.subheader("📝 Chat Summary")
+            for user_msg, bot_resp in st.session_state.conversation:
+                st.markdown(f"**You:** {user_msg}")
+                st.markdown(f"**Bot:** {bot_resp}")
+
         st.title("Chatbot using NLP")
         st.write("Start chatting below!")
 
@@ -177,5 +213,5 @@ def main():
     elif choice == "Conversation History":
         display_chat_history()
 
-if _name_ == '_main_':
+if __name__ == '_main_':
     main()
